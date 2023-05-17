@@ -1,0 +1,6 @@
+{
+    "require": {
+        "dragonmantank/cron-expression": "^3.3",
+        "symfony/console": "^6.2"
+    }
+}

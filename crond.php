@@ -21,7 +21,16 @@ php crond.php --reboot --debug
 class CronTabItem
 {
     public CronExpression $expression;
-    public $command;
+    public string $command;
+    public ?string $shell;
+    public bool $reboot = false;
+
+    public function __construct($expression, $command, $shell = null)
+    {
+        $this->expression = $expression;
+        $this->command = $command;
+        $this->shell = $shell;
+    }
 
     public function getExpression()
     {
@@ -30,12 +39,31 @@ class CronTabItem
 
     public function getCommand()
     {
-        
+        return $this->command;
+    }
+
+    public function setReboot($reboot)
+    {
+        $this->reboot = $reboot;
+        return $this;
+    }
+
+    public function isReboot()
+    {
+        return $this->reboot;
     }
 
     public static function parser(string $line): ?CronTabItem
     {
-        $cronTabItem = new CronTabItem();
+        // parser line
+        $itemList = array_map('trim', explode(' ', $line, 6));
+        if (!is_array($itemList) || count($itemList) < 6) {
+            return null;
+        }
+        $expression = $itemList[0] . ' ' . $itemList[1] . ' ' . $itemList[2] . ' ' . $itemList[3] . ' ' . $itemList[3];
+        $expression = new CronExpression($expression);
+        $command = implode(' ', array_slice($itemList, 5));
+        $cronTabItem = new CronTabItem($expression, $command);
 
         return $cronTabItem;
     }
@@ -47,9 +75,13 @@ class CronTabItem
                 return;
             }
         }
-
         $command = $this->getCommand();
+        echo 'run ' . $this->getExpression()->getExpression() . ' ' . $command . PHP_EOL;
+        if ($this->shell === null) { // use default shell
 
+        } else { // use customer shell
+
+        }
     }
 }
 
@@ -82,10 +114,10 @@ class Crond
         if (!$crontab) {
             throw new \Exception('crontab can not be empty');
         }
-        if (is_file($crontab)) {
+        if (!is_file($crontab)) {
             throw new \Exception('crontab should be a file');
         }
-        if (is_readable($crontab)) {
+        if (!is_readable($crontab)) {
             throw new \Exception('crontab can not read');
         }
 
@@ -98,12 +130,26 @@ class Crond
 
     public function parser()
     {
-        $cronTabArr = [];
-        $cronTabArrCount = count($cronTabArr);
-        $cronTab = new CronTab($cronTabArrCount);
-        $a = CronTab::fromArray([]);
-
-        return $cronTab;
+        $crontabStr = file_get_contents($this->crontab);
+        var_dump($crontabStr);
+        $cronTab = [];
+        $cronTabArr = explode("\n", str_replace("\r\n", "\n", trim($crontabStr)));
+        foreach ($cronTabArr as $line) {
+            $cronTabItem = CronTabItem::parser($line);
+            if ($cronTabItem != null) {
+                $cronTab[] = $cronTabItem;
+            }
+        }
+        $cronTabCount = count($cronTab);
+        if ($cronTabCount > 0) {
+            $cronTabSpl = new CronTab($cronTabCount);
+            foreach ($cronTab as $i =>  $item) {
+                $cronTabSpl[$i] = $item;
+            }
+            return $cronTabSpl;
+        } else {
+            return null;
+        }
     }
 
     public function run(CronTab $cronTab, $reboot = false)
@@ -115,9 +161,7 @@ class Crond
 
     public function runRebootTask(CronTab $cronTab)
     {
-        foreach ($cronTab as $item) {
-            $item->execute(true);
-        }
+        $this->run($cronTab, true);
     }
 }
 
@@ -152,9 +196,14 @@ class Crond
             $reboot = true;
         }
         $cronTab = $crond->parser();
+        if (count($cronTab) == 0) {
+            return Command::SUCCESS;
+        }
+        // $crond->run($cronTab, $reboot);
         do {
             $crond->run($cronTab, $reboot);
             $reboot = false;
+            sleep(60);
         } while ($daemon);
 
         return Command::SUCCESS;

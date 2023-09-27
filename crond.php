@@ -114,14 +114,13 @@ class Crond
 {
     public $crontab;
     public $shell;
-    public $reboot;
+    public $reboot = false;
     public $daemon;
     public $debug;
 
     public function __construct(
         $crontab,
         $shell = '',
-        $reboot = false,
         $daemon = false,
         $debug = false,
     ) {
@@ -137,7 +136,6 @@ class Crond
 
         $this->crontab = $crontab;
         $this->shell = $shell;
-        $this->reboot = $reboot;
         $this->daemon = $daemon;
         $this->debug = $debug;
     }
@@ -166,16 +164,11 @@ class Crond
         }
     }
 
-    public function run(CronTab $cronTab, $reboot = false)
+    public function run(CronTab $cronTab)
     {
         foreach ($cronTab as $item) {
             $item->execute(true);
         }
-    }
-
-    public function runRebootTask(CronTab $cronTab)
-    {
-        $this->run($cronTab, true);
     }
 }
 
@@ -184,14 +177,12 @@ class Crond
     ->setVersion('1.0.0') // Optional
     ->addOption('crontab', null, InputOption::VALUE_REQUIRED)
     ->addOption('shell', null, InputOption::VALUE_REQUIRED)
-    ->addOption('reboot', null, InputOption::VALUE_NONE)
     ->addOption('daemon', 'd', InputOption::VALUE_NONE)
     ->addOption('debug', null, InputOption::VALUE_NONE)
     ->setCode(function (InputInterface $input, OutputInterface $output) {
         $options = $input->getOptions();
         $crontab = $options['crontab'] ?? '';
         $shell = $options['shell'] ?? '';
-        $reboot = $options['reboot'] ?? false;
         $daemon = $options['daemon'] ?? false;
         $debug = $options['debug'] ?? false;
 
@@ -202,23 +193,18 @@ class Crond
         $crond = new Crond(
             (string)$crontab,
             (string)$shell,
-            (bool)$reboot,
             (bool)$daemon,
             (bool)$debug,
         );
-        if ($daemon) {
-            $reboot = true;
-        }
+
         $cronTab = $crond->parser();
         if (count($cronTab) == 0) {
             return Command::SUCCESS;
         }
-        // $crond->run($cronTab, $reboot);
+
         do {
-            $crond->run($cronTab, $reboot);
-            $reboot = false;
-            sleep(60);
-        } while ($daemon);
+            $crond->run($cronTab);
+        } while ($daemon && sleep(60) !== false);
 
         return Command::SUCCESS;
     })

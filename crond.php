@@ -56,13 +56,27 @@ class CronTabItem
     public static function parser(string $line): ?CronTabItem
     {
         // parser line
-        $itemList = array_map('trim', explode(' ', $line, 6));
-        if (!is_array($itemList) || count($itemList) < 6) {
+        $line = trim($line);
+        if (substr($line, 0, 1) == '#') {
+            return null;
+        } else if (substr($line, 0, 1) == '@') {
+            $itemNo = 2;
+        } else {
+            $itemNo = 6;
+        }
+        $itemList = array_map('trim', explode(' ', $line, $itemNo));
+        if (!is_array($itemList) || count($itemList) < $itemNo) {
             return null;
         }
-        $expression = $itemList[0] . ' ' . $itemList[1] . ' ' . $itemList[2] . ' ' . $itemList[3] . ' ' . $itemList[3];
+
+        if ($itemNo == 6) {
+            $expression = $itemList[0] . ' ' . $itemList[1] . ' ' . $itemList[2] . ' ' . $itemList[3] . ' ' . $itemList[4];
+        } else {
+            $expression = $itemList[0];
+        }
+
         $expression = new CronExpression($expression);
-        $command = implode(' ', array_slice($itemList, 5));
+        $command = implode(' ', array_slice($itemList, $itemNo - 1));
         $cronTabItem = new CronTabItem($expression, $command);
 
         return $cronTabItem;
@@ -148,7 +162,7 @@ class Crond
             }
             return $cronTabSpl;
         } else {
-            return null;
+            return [];
         }
     }
 

@@ -199,11 +199,18 @@ class Crond
                 ], $pipes);
             } else { // use customer shell
                 $shellExec = $this->shell;
+                // $sh = proc_open($shellExec, [
+                //     0 => ['pipe', 'r'],
+                //     1 => ['pipe', 'w']
+                // ], $pipes);
+                // fwrite($pipes[0], $command . PHP_EOL);
+                $shellExec = $shellExec . ' -c "' . str_replace('"', '\"', trim($command)) . '"';
+                // echo $shellExec; echo PHP_EOL;
                 $sh = proc_open($shellExec, [
                     0 => ['pipe', 'r'],
                     1 => ['pipe', 'w']
                 ], $pipes);
-                fwrite($pipes[0], $command . PHP_EOL);
+                // fwrite($pipes[0], $command . PHP_EOL);
             }
             $pipes = [];
             $this->execList[] = $sh;
@@ -214,7 +221,7 @@ class Crond
             // echo $i; echo "\t"; echo $status['pid']; echo "\t"; echo $status['running']; echo PHP_EOL;
             if ($status['running'] == false) {
                 proc_close($this->execList[$i]);
-                array_splice($this->execList, $i, 0);
+                array_splice($this->execList, $i, 1);
             }
         }
     }
@@ -271,7 +278,7 @@ class Crond
                 echo $e->getTraceAsString();echo PHP_EOL;
                 return Command::FAILURE;
             }
-        } while ($daemon && sleep(10) !== false);
+        } while ($daemon && sleep(60) !== false);
 
         return Command::SUCCESS;
     })

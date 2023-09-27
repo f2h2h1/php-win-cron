@@ -11,10 +11,13 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\SingleCommandApplication;
 use Symfony\Component\Console\Command\Command;
 use Cron\CronExpression;
+
 /*
 
-php crond.php -- 
-php crond.php --reboot --debug
+php crond.php --crontab crontab
+php crond.php --crontab crontab --debug
+php crond.php --crontab crontab --daemon --debug
+echo $?
 
 */
 
@@ -90,7 +93,6 @@ class CronTabItem
             }
         }
         $command = $this->getCommand();
-        echo 'run ' . $this->getExpression()->getExpression() . ' ' . $command . PHP_EOL;
         if ($this->shell === null) { // use default shell
 
         } else { // use customer shell
@@ -133,7 +135,7 @@ class Crond
         if (!is_readable($crontab)) {
             throw new \Exception('crontab can not read');
         }
-
+        
         $this->crontab = $crontab;
         $this->shell = $shell;
         $this->daemon = $daemon;
@@ -143,7 +145,9 @@ class Crond
     public function parser()
     {
         $crontabStr = file_get_contents($this->crontab);
-        var_dump($crontabStr);
+        if ($this->debug) {
+            echo 'crontab content ' . PHP_EOL . $crontabStr . PHP_EOL;
+        }
         $cronTab = [];
         $cronTabArr = explode("\n", str_replace("\r\n", "\n", trim($crontabStr)));
         foreach ($cronTabArr as $line) {
@@ -153,10 +157,19 @@ class Crond
             }
         }
         $cronTabCount = count($cronTab);
+        if ($this->debug) {
+            echo 'valid items total ' . $cronTabCount . PHP_EOL;
+        }
         if ($cronTabCount > 0) {
             $cronTabSpl = new CronTab($cronTabCount);
             foreach ($cronTab as $i =>  $item) {
                 $cronTabSpl[$i] = $item;
+            }
+            if ($this->debug) {
+                echo 'valid items list' . PHP_EOL;
+                foreach ($cronTab as $i =>  $item) {
+                    echo $item->getExpression()->getExpression() . ' ' . $item->getCommand() . PHP_EOL;
+                }
             }
             return $cronTabSpl;
         } else {
@@ -167,6 +180,10 @@ class Crond
     public function run(CronTab $cronTab)
     {
         foreach ($cronTab as $item) {
+            if ($this->debug) {
+                echo date('Y-m-d\TH:i:sP') . ' run command' . PHP_EOL;
+                echo $item->getExpression()->getExpression() . ' ' . $item->getCommand() . PHP_EOL;
+            }
             $item->execute(true);
         }
     }
@@ -187,23 +204,42 @@ class Crond
         $debug = $options['debug'] ?? false;
 
         if ($debug) {
-            var_dump($input->getOptions());
+            foreach ($input->getOptions() as $k => $v) {
+                echo $k . "\t";
+                var_dump($v);
+            }
         }
-
-        $crond = new Crond(
-            (string)$crontab,
-            (string)$shell,
-            (bool)$daemon,
-            (bool)$debug,
-        );
-
-        $cronTab = $crond->parser();
-        if (count($cronTab) == 0) {
-            return Command::SUCCESS;
+        try {
+            $crond = new Crond(
+                (string)$crontab,
+                (string)$shell,
+                (bool)$daemon,
+                (bool)$debug,
+            );
+            $cronTab = $crond->parser();
+            if (count($cronTab) == 0) {
+                if ($debug) {
+                    echo 'no items' . PHP_EOL;
+                }
+                return Command::SUCCESS;
+            }
+        } catch (\Throwable $e) {
+            echo $e->getMessage();echo PHP_EOL;
+            echo $e->getTraceAsString();echo PHP_EOL;
+            return Command::INVALID;
         }
 
         do {
-            $crond->run($cronTab);
+            try {
+                $crond->run($cronTab);
+            } catch (\Exception $e) {
+                echo $e->getMessage();echo PHP_EOL;
+                echo $e->getTraceAsString();echo PHP_EOL;
+            } catch (\Throwable $e) {
+                echo $e->getMessage();echo PHP_EOL;
+                echo $e->getTraceAsString();echo PHP_EOL;
+                return Command::FAILURE;
+            }
         } while ($daemon && sleep(60) !== false);
 
         return Command::SUCCESS;

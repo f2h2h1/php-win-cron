@@ -17,6 +17,7 @@ use Cron\CronExpression;
 php crond.php --crontab crontab
 php crond.php --crontab crontab --debug
 php crond.php --crontab crontab --daemon --debug
+php crond.php --crontab crontab2 --shell "C:\Users\81522963\.CoronaeBorealis\Git\cmd\bash.exe -l" --daemon --debug
 echo $?
 
 */
@@ -119,6 +120,7 @@ class Crond
     public $reboot = false;
     public $daemon;
     public $debug;
+    public $execList = [];
 
     public function __construct(
         $crontab,
@@ -180,11 +182,40 @@ class Crond
     public function run(CronTab $cronTab)
     {
         foreach ($cronTab as $item) {
+            if (!$item->getExpression()->isDue()) {
+                continue;
+            }
             if ($this->debug) {
                 echo date('Y-m-d\TH:i:sP') . ' run command' . PHP_EOL;
                 echo $item->getExpression()->getExpression() . ' ' . $item->getCommand() . PHP_EOL;
             }
-            $item->execute(true);
+
+            // $item->execute(true);
+            $command = $item->getCommand();
+            if ($this->shell === null) { // use default shell
+                $sh = proc_open($command, [
+                    0 => ['pipe', 'r'],
+                    1 => ['pipe', 'w']
+                ], $pipes);
+            } else { // use customer shell
+                $shellExec = $this->shell;
+                $sh = proc_open($shellExec, [
+                    0 => ['pipe', 'r'],
+                    1 => ['pipe', 'w']
+                ], $pipes);
+                fwrite($pipes[0], $command . PHP_EOL);
+            }
+            $pipes = [];
+            $this->execList[] = $sh;
+        }
+        // echo count($this->execList);echo PHP_EOL;
+        for ($i = count($this->execList) - 1; $i >= 0; $i--) {
+            $status = proc_get_status($this->execList[$i]);
+            // echo $i; echo "\t"; echo $status['pid']; echo "\t"; echo $status['running']; echo PHP_EOL;
+            if ($status['running'] == false) {
+                proc_close($this->execList[$i]);
+                array_splice($this->execList, $i, 0);
+            }
         }
     }
 }
@@ -240,7 +271,7 @@ class Crond
                 echo $e->getTraceAsString();echo PHP_EOL;
                 return Command::FAILURE;
             }
-        } while ($daemon && sleep(60) !== false);
+        } while ($daemon && sleep(10) !== false);
 
         return Command::SUCCESS;
     })

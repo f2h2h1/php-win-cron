@@ -17,7 +17,7 @@ use Cron\CronExpression;
 php crond.php --crontab crontab
 php crond.php --crontab crontab --debug
 php crond.php --crontab crontab --daemon --debug
-php crond.php --crontab crontab2 --shell "C:\Users\81522963\.CoronaeBorealis\Git\cmd\bash.exe -l" --daemon --debug
+php crond.php --crontab crontab2 --shell "C:\Users\a\Git\cmd\bash.exe -l" --daemon --debug
 echo $?
 
 */
@@ -209,7 +209,7 @@ class Crond
                 $sh = proc_open($shellExec, [
                     0 => ['pipe', 'r'],
                     1 => ['pipe', 'w']
-                ], $pipes);
+                ], $pipes, null, null, ['bypass_shell' => false]);
                 // fwrite($pipes[0], $command . PHP_EOL);
             }
             $pipes = [];
@@ -224,6 +224,7 @@ class Crond
                 array_splice($this->execList, $i, 1);
             }
         }
+        // echo count($this->execList);echo PHP_EOL;
     }
 }
 
